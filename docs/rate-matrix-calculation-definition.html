@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Scot Travels Rate Matrix Calculation Definition</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 18mm 16mm;
+      }
+      :root {
+        --ink: #1e293b;
+        --muted: #475569;
+        --line: #cbd5e1;
+        --soft: #f8fafc;
+        --brand: #0f172a;
+        --accent: #0ea5e9;
+        --ok: #065f46;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--ink);
+        line-height: 1.45;
+        font-size: 12px;
+      }
+      h1, h2, h3 { margin: 0 0 10px; color: var(--brand); }
+      h1 { font-size: 24px; line-height: 1.15; }
+      h2 {
+        margin-top: 24px;
+        padding-bottom: 6px;
+        font-size: 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      h3 { margin-top: 16px; font-size: 13px; }
+      p { margin: 0 0 10px; }
+      ul, ol { margin: 0 0 12px 18px; padding: 0; }
+      li { margin-bottom: 5px; }
+      .hero {
+        padding: 16px 18px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: linear-gradient(135deg, #eff6ff, #f8fafc);
+      }
+      .meta {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .note, .placeholder, .formula {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        background: var(--soft);
+        margin: 10px 0 12px;
+      }
+      .placeholder {
+        border-style: dashed;
+        color: var(--muted);
+      }
+      .formula {
+        background: #f8fafc;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: pre-wrap;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 10px 0 14px;
+      }
+      th, td {
+        border: 1px solid var(--line);
+        padding: 8px 9px;
+        vertical-align: top;
+        text-align: left;
+      }
+      th {
+        background: #e2e8f0;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .small { font-size: 11px; color: var(--muted); }
+      .good { color: var(--ok); font-weight: 600; }
+      .section-break { break-inside: avoid; }
+    </style>
+  </head>
+  <body>
+    <div class="hero section-break">
+      <h1>Scot Travels Rate Matrix Calculation Definition</h1>
+      <p>
+        This document defines only the rate calculation logic for the state-based rate matrix.
+        It is aligned to the current implementation and is intended for admin, QA, and future development reference.
+      </p>
+      <div class="meta">
+        Version: 1.0<br />
+        Scope: State-based vehicle rates, progressive slab pricing, surcharges, tax, and quote total calculation<br />
+        Currency: GBP
+      </div>
+    </div>
+
+    <h2>1. Purpose</h2>
+    <p>
+      The rate matrix controls how a quote total is calculated for a specific pickup route, state, and vehicle.
+      Each active state can have separate rates for each active vehicle. The quote engine selects the correct state,
+      then calculates one fare option per configured vehicle inside that state.
+    </p>
+
+    <div class="placeholder section-break">
+      <strong>Screenshot Placeholder 1</strong><br />
+      Add screenshot of the admin rate matrix screen here.
+    </div>
+
+    <h2>2. Calculation Scope</h2>
+    <ul>
+      <li>Rate selection is state-specific.</li>
+      <li>Vehicle pricing is state-specific.</li>
+      <li>Distance pricing uses progressive slabs for all vehicles.</li>
+      <li>Meet &amp; greet, airport pickup, waypoint fee, night surcharge, and tax are added on top.</li>
+      <li>For return journeys, each leg is calculated separately and then summed.</li>
+    </ul>
+
+    <h2>3. Rate Record Structure</h2>
+    <p>Each rate record is unique for one combination of <strong>state + vehicle</strong>.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Type</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>stateId</td><td>Reference</td><td>The state this rate belongs to.</td></tr>
+        <tr><td>vehicleId</td><td>Reference</td><td>The vehicle this rate belongs to.</td></tr>
+        <tr><td>minimumBillableMiles</td><td>Integer</td><td>Minimum miles to charge even if actual route miles are lower.</td></tr>
+        <tr><td>slabs[]</td><td>Array</td><td>Progressive mileage slabs used to calculate distance charge.</td></tr>
+        <tr><td>airportPickupFee</td><td>Number</td><td>Flat fee added to every quote using this rate.</td></tr>
+        <tr><td>meetAndGreetFee</td><td>Number</td><td>Flat fee added only when meet &amp; greet is selected.</td></tr>
+        <tr><td>waypointFee</td><td>Number</td><td>Flat fee applied per stop/waypoint.</td></tr>
+        <tr><td>nightWindowStart</td><td>HH:MM</td><td>Night charging window start time.</td></tr>
+        <tr><td>nightWindowEnd</td><td>HH:MM</td><td>Night charging window end time.</td></tr>
+        <tr><td>nightSurchargeFee</td><td>Number</td><td>Flat night surcharge added when pickup falls inside night window.</td></tr>
+        <tr><td>taxRate</td><td>Number</td><td>Tax percentage stored as decimal. Example: 0.20 = 20%.</td></tr>
+        <tr><td>active</td><td>Boolean</td><td>Only active rates are used in quote calculation.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>4. State Resolution Rule</h2>
+    <ol>
+      <li>Only active states are considered.</li>
+      <li>The pickup location decides the state.</li>
+      <li>A state matches if one of these is true:</li>
+    </ol>
+    <ul>
+      <li>pickup.state exactly matches the state code</li>
+      <li>pickup.state exactly matches the state name</li>
+      <li>pickup.address contains the state name</li>
+    </ul>
+    <p>
+      If only one active state exists and no exact match is found, that single active state is used.
+      If multiple active states exist and none matches, quote generation fails.
+    </p>
+
+    <h2>5. Vehicle Rate Selection Rule</h2>
+    <ol>
+      <li>Once the state is resolved, only rates for that state are loaded.</li>
+      <li>Only active rates are loaded.</li>
+      <li>Only rates whose linked vehicle is also active are shown.</li>
+      <li>Fare options are sorted by vehicle display order, then by vehicle name.</li>
+      <li>There can be only one rate record for one state + one vehicle.</li>
+    </ol>
+
+    <div class="placeholder section-break">
+      <strong>Screenshot Placeholder 2</strong><br />
+      Add screenshot of the state-specific vehicle rate table here.
+    </div>
+
+    <h2>6. Progressive Slab Rules</h2>
+    <p>Slabs are validated before saving. The following rules are enforced:</p>
+    <ul>
+      <li>At least one slab is required.</li>
+      <li>The first slab must start from <strong>1 mile</strong>.</li>
+      <li><code>fromMiles</code> must be an integer greater than or equal to 1.</li>
+      <li><code>toMiles</code> must be null or an integer greater than or equal to <code>fromMiles</code>.</li>
+      <li><code>ratePerMile</code> must be greater than 0.</li>
+      <li>Slabs must be contiguous with no gaps and no overlaps.</li>
+      <li>Only the last slab may be open-ended (<code>toMiles = null</code>).</li>
+      <li>Slabs are normalized and stored in order.</li>
+    </ul>
+
+    <h3>Sample Slab Configuration</h3>
+    <div class="formula">[
+  { "fromMiles": 1,  "toMiles": 10,  "ratePerMile": 4.0 },
+  { "fromMiles": 11, "toMiles": null, "ratePerMile": 3.5 }
+]</div>
+
+    <p class="small">
+      Meaning: the first 10 billable miles are charged at 4.00 per mile. Any billable miles above 10 are charged at 3.50 per mile.
+    </p>
+
+    <h2>7. Input Values Used in Fare Calculation</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Input</th>
+          <th>Source</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>miles</td><td>Google route metrics</td><td>Actual route miles after pickup, dropoff, and stops are calculated.</td></tr>
+        <tr><td>stops</td><td>Journey builder</td><td>Waypoint fee depends on the count of stops.</td></tr>
+        <tr><td>includeMeetAndGreet</td><td>Booking details form</td><td>Controls whether meet &amp; greet fee is added.</td></tr>
+        <tr><td>pickupAtLocal</td><td>Journey date/time</td><td>Used only to test night surcharge eligibility.</td></tr>
+        <tr><td>rate</td><td>StateVehicleRate</td><td>Includes all fees, slabs, tax, and minimum billable miles.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>8. Fare Calculation Formula</h2>
+
+    <h3>Step 1: Billable Miles</h3>
+    <div class="formula">billableMiles = max(actualMiles, minimumBillableMiles)</div>
+
+    <h3>Step 2: Distance Charge Using Progressive Slabs</h3>
+    <p>
+      Distance charge is not flat per mile across the whole trip. It is calculated progressively slab by slab.
+    </p>
+    <div class="formula">distanceCharge = sum(each covered slab miles × slab ratePerMile)</div>
+
+    <h3>Step 3: Optional and Flat Add-ons</h3>
+    <div class="formula">airportPickupFee = configured flat fee
+meetAndGreetFee = configured fee if meet &amp; greet is selected, otherwise 0
+waypointFee = numberOfStops × configured waypoint fee</div>
+
+    <h3>Step 4: Base Subtotal</h3>
+    <div class="formula">baseSubtotal = distanceCharge + airportPickupFee + meetAndGreetFee + waypointFee</div>
+
+    <h3>Step 5: Night Surcharge Check</h3>
+    <p>
+      The pickup time is checked against the configured night window. If the night window crosses midnight,
+      the logic still works correctly.
+    </p>
+    <ul>
+      <li>If start time equals end time, night surcharge applies all day.</li>
+      <li>If start time is earlier than end time, pickup must be within the same-day window.</li>
+      <li>If start time is later than end time, the window crosses midnight.</li>
+    </ul>
+    <div class="formula">nightSurchargeApplied = pickupAtLocal falls inside configured night window
+surchargeTotal = nightSurchargeApplied ? nightSurchargeFee : 0</div>
+
+    <h3>Step 6: Tax and Final Total</h3>
+    <div class="formula">subtotal = baseSubtotal + surchargeTotal
+taxAmount = subtotal × taxRate
+total = subtotal + taxAmount</div>
+
+    <p class="small">All currency values are rounded to 2 decimal places before returning the final breakdown.</p>
+
+    <h2>9. Worked Example</h2>
+    <p>Example assumptions:</p>
+    <ul>
+      <li>Actual miles: 12.00</li>
+      <li>Minimum billable miles: 3</li>
+      <li>Slabs: 1-10 = 4.00 per mile, 11+ = 3.50 per mile</li>
+      <li>Airport pickup fee: 8.00</li>
+      <li>Meet &amp; greet selected: Yes, fee 12.00</li>
+      <li>Stops: 2, waypoint fee 6.00 each</li>
+      <li>Night surcharge applies: Yes, fee 20.00</li>
+      <li>Tax rate: 0.20</li>
+    </ul>
+
+    <div class="formula">billableMiles = max(12.00, 3) = 12.00
+
+Distance charge:
+  slab 1-10   = 10 × 4.00 = 40.00
+  slab 11-12  =  2 × 3.50 =  7.00
+  distanceCharge = 47.00
+
+waypointFee = 2 × 6.00 = 12.00
+baseSubtotal = 47.00 + 8.00 + 12.00 + 12.00 = 79.00
+surchargeTotal = 20.00
+subtotal = 79.00 + 20.00 = 99.00
+taxAmount = 99.00 × 0.20 = 19.80
+total = 99.00 + 19.80 = 118.80</div>
+
+    <h2>10. Return Journey Rule</h2>
+    <p>
+      A return journey is not calculated as one combined fare first. Each leg is quoted independently.
+    </p>
+    <ol>
+      <li>Calculate outbound leg using outbound miles, stops, pickup time, and selected options.</li>
+      <li>Calculate inbound leg using inbound miles, stops, pickup time, and selected options.</li>
+      <li>Total return price = outbound total + inbound total.</li>
+    </ol>
+
+    <div class="placeholder section-break">
+      <strong>Screenshot Placeholder 3</strong><br />
+      Add screenshot of quote result / breakdown screen here.
+    </div>
+
+    <h2>11. Validation and Failure Conditions</h2>
+    <ul>
+      <li>If no active state matches the pickup location, quote generation fails.</li>
+      <li>If the resolved state has no active rates, quote generation fails.</li>
+      <li>If a rate already exists for the same state + vehicle, a duplicate save is blocked.</li>
+      <li>If slab JSON is invalid, save is blocked.</li>
+      <li>If slab ranges have gaps or overlaps, save is blocked.</li>
+      <li>If taxRate exceeds 0.30, save is blocked.</li>
+      <li>If referenced state or vehicle is missing, save is blocked.</li>
+    </ul>
+
+    <h2>12. Current Implementation Notes</h2>
+    <ul>
+      <li>Tax rate is stored as decimal, not percentage text. Example: 0.20 means 20%.</li>
+      <li>Night surcharge is currently a flat fee, not a multiplier.</li>
+      <li>Waypoint fee is currently charged per stop.</li>
+      <li>Airport pickup fee is currently always added as part of the active rate formula.</li>
+      <li>All quote totals are returned in GBP.</li>
+    </ul>
+
+    <h2>13. Source References</h2>
+    <ul>
+      <li><code>src/lib/quote-pricing.js</code></li>
+      <li><code>src/lib/slab-utils.js</code></li>
+      <li><code>src/models/StateVehicleRate.js</code></li>
+      <li><code>src/app/api/admin/state-vehicle-rates/route.js</code></li>
+      <li><code>src/app/api/admin/state-vehicle-rates/[id]/route.js</code></li>
+    </ul>
+  </body>
+</html>

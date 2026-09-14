@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Scot Travels Rate Logic Summary</title>
+    <style>
+      :root {
+        --bg: #f4f8fb;
+        --surface: #ffffff;
+        --text: #21324b;
+        --muted: #5f728c;
+        --line: #d7e2ec;
+        --navy: #26395a;
+        --blue: #3ea3cf;
+        --soft: #eef5fb;
+        --soft-gold: #fff8e8;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.6;
+      }
+      .page {
+        max-width: 920px;
+        margin: 0 auto;
+        padding: 28px 18px 40px;
+      }
+      .hero, .section {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        box-shadow: 0 12px 28px rgba(32, 52, 84, 0.04);
+      }
+      .hero {
+        padding: 26px;
+        background: linear-gradient(135deg, #f8fbfe 0%, #eef5fb 100%);
+      }
+      .section {
+        margin-top: 18px;
+        padding: 22px;
+      }
+      .eyebrow {
+        margin: 0 0 10px;
+        color: var(--blue);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 0;
+        font-size: 36px;
+        line-height: 1.08;
+        letter-spacing: -0.03em;
+        color: var(--navy);
+      }
+      h2 {
+        margin: 0 0 12px;
+        font-size: 24px;
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+        color: var(--navy);
+      }
+      p {
+        margin: 0 0 12px;
+        font-size: 16px;
+      }
+      .lead {
+        margin-top: 14px;
+        font-size: 18px;
+        color: var(--muted);
+        max-width: 760px;
+      }
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 16px;
+      }
+      .pill {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 8px 12px;
+        background: #fff;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .steps {
+        display: grid;
+        gap: 10px;
+      }
+      .step {
+        display: grid;
+        grid-template-columns: 36px 1fr;
+        gap: 12px;
+        align-items: start;
+        padding: 14px;
+        border-radius: 14px;
+        background: var(--soft);
+        border: 1px solid var(--line);
+      }
+      .num {
+        width: 36px;
+        height: 36px;
+        border-radius: 999px;
+        background: var(--navy);
+        color: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 800;
+      }
+      .step strong, .note strong, .calc-row strong { color: var(--navy); }
+      .media {
+        margin-top: 14px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 10px;
+        background: #fff;
+      }
+      .media img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: 10px;
+      }
+      .caption {
+        margin-top: 8px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .note {
+        margin-top: 12px;
+        padding: 14px 16px;
+        border-left: 4px solid var(--blue);
+        border-radius: 14px;
+        background: #fbfdff;
+        border: 1px solid var(--line);
+      }
+      .example {
+        margin-top: 14px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        overflow: hidden;
+      }
+      .example-head {
+        padding: 14px 16px;
+        background: var(--navy);
+        color: #fff;
+        font-size: 18px;
+        font-weight: 800;
+      }
+      .example-body {
+        padding: 16px;
+        background: #fff;
+      }
+      .facts {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+      .fact {
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--soft);
+        font-size: 14px;
+      }
+      .calc {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        overflow: hidden;
+      }
+      .calc-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 12px;
+        padding: 12px 14px;
+        border-top: 1px solid var(--line);
+        background: #fff;
+        font-size: 15px;
+      }
+      .calc-row:first-child { border-top: 0; }
+      .calc-row.total { background: var(--soft-gold); font-weight: 800; }
+      .small { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
+      .live-note {
+        margin-top: 18px;
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: #f8fbfe;
+        border: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 14px;
+      }
+      code {
+        padding: 2px 6px;
+        border-radius: 6px;
+        background: #eef3f8;
+        color: var(--navy);
+        font-size: 0.95em;
+      }
+      @media (max-width: 760px) {
+        .page { padding: 18px 14px 30px; }
+        h1 { font-size: 30px; }
+        h2 { font-size: 22px; }
+        .facts { grid-template-columns: 1fr; }
+        .step { grid-template-columns: 32px 1fr; }
+        .num { width: 32px; height: 32px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <p class="eyebrow">Scot Travels</p>
+        <h1>Rate Logic Summary</h1>
+        <p class="lead">
+          This is the short version. It explains how pricing is set up, how a quote is built, and why the final fare changes.
+        </p>
+        <div class="pill-row">
+          <span class="pill">State first</span>
+          <span class="pill">Vehicle-specific rates</span>
+          <span class="pill">Progressive slabs</span>
+          <span class="pill">Extra fees</span>
+          <span class="pill">Tax at the end</span>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>The pricing story</h2>
+        <div class="steps">
+          <div class="step"><span class="num">1</span><div><strong>First we create the vehicle.</strong><br />This holds the base vehicle details such as name, code, seats and luggage.</div></div>
+          <div class="step"><span class="num">2</span><div><strong>Then we create the state.</strong><br />This lets the business manage pricing separately by region.</div></div>
+          <div class="step"><span class="num">3</span><div><strong>Then we add the rate for that vehicle inside that state.</strong><br />This is where miles, slabs, airport fee, waypoint fee, meet &amp; greet, night fee and tax are defined.</div></div>
+          <div class="step"><span class="num">4</span><div><strong>When a customer requests a quote, the pickup location decides the state.</strong><br />The system then loads all active vehicle rates for that state.</div></div>
+          <div class="step"><span class="num">5</span><div><strong>Each vehicle gets its own fare.</strong><br />The customer sees the options and picks one.</div></div>
+        </div>
+        <div class="note">
+          <strong>Important:</strong> the same vehicle can be reused across multiple states, but each state can have its own completely different price for that vehicle.
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>How the fare is built</h2>
+        <p>
+          The fare starts with mileage, but mileage is not charged as one flat rate for the full trip. It uses slabs.
+        </p>
+        <p>
+          Example: the first 10 miles can be charged at one rate, and any miles after that can be charged at another.
+        </p>
+        <div class="note">
+          <strong>Simple way to read it:</strong> one journey can move through more than one mileage band.
+        </div>
+        <p>
+          After mileage, the system can add airport pickup fee, waypoint fee, meet &amp; greet fee, night surcharge, and finally tax.
+        </p>
+        <div class="media">
+          <img src="./images/rate-edit-screen.png" alt="Rate edit screen" />
+          <div class="caption">This is the admin screen where one vehicle's price is configured inside a selected state.</div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Real Edinburgh example</h2>
+        <p>
+          Here is one real example using a trip from <strong>Edinburgh Airport</strong> to <strong>20 Princes St, Edinburgh EH2 2AN</strong>.
+        </p>
+        <div class="example">
+          <div class="example-head">Edinburgh Airport -> Edinburgh Hotel</div>
+          <div class="example-body">
+            <div class="facts">
+              <div class="fact"><strong>Vehicle</strong><br />Premium Sedan</div>
+              <div class="fact"><strong>Miles</strong><br />8.58 miles</div>
+              <div class="fact"><strong>Stops</strong><br />1 stop</div>
+              <div class="fact"><strong>Pickup time</strong><br />19:09</div>
+              <div class="fact"><strong>Meet &amp; greet</strong><br />No</div>
+              <div class="fact"><strong>Tax</strong><br />20%</div>
+            </div>
+
+            <div class="calc">
+              <div class="calc-row"><span><strong>Distance charge</strong><span class="small">8.58 miles x GBP 4.00</span></span><span>GBP 34.32</span></div>
+              <div class="calc-row"><span><strong>Airport pickup fee</strong></span><span>GBP 40.00</span></div>
+              <div class="calc-row"><span><strong>Waypoint fee</strong><span class="small">1 stop x GBP 20.00</span></span><span>GBP 20.00</span></div>
+              <div class="calc-row"><span><strong>Meet &amp; greet fee</strong></span><span>GBP 0.00</span></div>
+              <div class="calc-row"><span><strong>Night surcharge</strong></span><span>GBP 20.00</span></div>
+              <div class="calc-row"><span><strong>Subtotal</strong></span><span>GBP 114.32</span></div>
+              <div class="calc-row"><span><strong>Tax</strong><span class="small">20% of GBP 114.32</span></span><span>GBP 22.86</span></div>
+              <div class="calc-row total"><span><strong>Final total</strong></span><span>GBP 137.18</span></div>
+            </div>
+
+            <div class="note">
+              <strong>Why this total is not low:</strong> the trip is not just mileage. Airport pickup, the extra stop, and the night fee all sit on top of the mileage before tax is added.
+            </div>
+ 
+          </div>
+        </div>
+      </section>
+ 
+    </main>
+  </body>
+</html>
