@@ -146,9 +146,9 @@ export function QuoteBuilder({ content, variant = "default", prefill = false }) 
         throw new Error("Maximum 4 stop locations are allowed.");
       }
 
-      if (!isUkLocation(normalizedPickup) || !isUkLocation(normalizedDropoff)) {
-        throw new Error("Pickup and drop-off must be within UK.");
-      }
+      // if (!isUkLocation(normalizedPickup) || !isUkLocation(normalizedDropoff)) {
+      //   throw new Error("Pickup and drop-off must be within UK.");
+      // }
       if (normalizedStops.some((item) => !isUkLocation(item))) {
         throw new Error("All stop locations must be within UK.");
       }

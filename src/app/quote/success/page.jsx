@@ -222,7 +222,7 @@ export default async function QuoteSuccessPage({ searchParams }) {
                     key={bookingNumber}
                     className="rounded-xl bg-[rgba(255,255,255,0.06)] px-4 py-3 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
                   >
-                    {bookingNumber}
+                    ST_{bookingNumber}
                   </div>
                 ))
               ) : (

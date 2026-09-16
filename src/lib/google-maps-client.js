@@ -1,23 +1,28 @@
+
 "use client";
 
 let mapsScriptPromise = null;
 let placesLibraryPromise = null;
 
-function getLegacyPlacesApi() {
-  return window.google?.maps?.places || null;
-}
-
 export function loadGoogleMapsClient(apiKey) {
   if (typeof window === "undefined") {
-    return Promise.reject(new Error("Google Maps can only be loaded in browser."));
-  }
-
-  if (window.google?.maps) {
-    return Promise.resolve(window.google);
+    return Promise.reject(
+      new Error("Google Maps can only be loaded in the browser.")
+    );
   }
 
   if (!apiKey) {
-    return Promise.reject(new Error("Google Maps API key is missing."));
+    return Promise.reject(
+      new Error("Google Maps API key is missing.")
+    );
+  }
+
+  // Already fully initialized
+  if (
+    window.google?.maps?.importLibrary &&
+    window.google?.maps?.version
+  ) {
+    return Promise.resolve(window.google);
   }
 
   if (mapsScriptPromise) {
@@ -25,30 +30,91 @@ export function loadGoogleMapsClient(apiKey) {
   }
 
   mapsScriptPromise = new Promise((resolve, reject) => {
+    // If another part of the app already added the script
     const existing = document.getElementById("google-maps-script");
+
     if (existing) {
-      if (window.google?.maps) {
-        resolve(window.google);
+      const checkReady = () => {
+        if (
+          window.google?.maps?.importLibrary &&
+          window.google?.maps?.version
+        ) {
+          resolve(window.google);
+          return true;
+        }
+
+        return false;
+      };
+
+      if (checkReady()) {
         return;
       }
-      existing.addEventListener("load", () => resolve(window.google));
-      existing.addEventListener("error", () => reject(new Error("Failed to load Google Maps script.")));
+
+      // Wait until Google's callback initializes the API
+      const previousCallback = window.__googleMapsReady;
+
+      window.__googleMapsReady = () => {
+        previousCallback?.();
+
+        if (checkReady()) {
+          return;
+        }
+
+        reject(
+          new Error(
+            "Google Maps loaded, but the API did not initialize correctly."
+          )
+        );
+      };
+
       return;
     }
 
-    const script = document.createElement("script");
-    script.id = "google-maps-script";
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      if (window.google?.maps) {
+    // Google's recommended dynamic bootstrap loader
+    const callbackName = "__googleMapsInit";
+
+    window[callbackName] = () => {
+      if (
+        window.google?.maps?.importLibrary &&
+        window.google?.maps?.version
+      ) {
         resolve(window.google);
       } else {
-        reject(new Error("Google Maps API is not available."));
+        reject(
+          new Error(
+            "Google Maps loaded, but importLibrary is unavailable."
+          )
+        );
       }
+
+      delete window[callbackName];
     };
-    script.onerror = () => reject(new Error("Failed to load Google Maps script."));
+
+    const script = document.createElement("script");
+
+    script.id = "google-maps-script";
+
+    script.src =
+      "https://maps.googleapis.com/maps/api/js" +
+      `?key=${encodeURIComponent(apiKey)}` +
+      "&v=weekly" +
+      `&callback=${callbackName}`;
+
+    script.async = true;
+    script.defer = true;
+
+    script.onerror = () => {
+      delete window[callbackName];
+
+      mapsScriptPromise = null;
+
+      reject(
+        new Error(
+          "Failed to load Google Maps JavaScript API."
+        )
+      );
+    };
+
     document.head.appendChild(script);
   });
 
@@ -57,41 +123,40 @@ export function loadGoogleMapsClient(apiKey) {
 
 export function loadGooglePlacesLibrary(apiKey) {
   if (typeof window === "undefined") {
-    return Promise.reject(new Error("Google Places can only be loaded in browser."));
-  }
-
-  const legacyPlacesApi = getLegacyPlacesApi();
-  if (
-    legacyPlacesApi?.AutocompleteService &&
-    legacyPlacesApi?.PlacesService &&
-    legacyPlacesApi?.PlacesServiceStatus
-  ) {
-    return Promise.resolve(legacyPlacesApi);
+    return Promise.reject(
+      new Error("Google Places can only be loaded in the browser.")
+    );
   }
 
   if (placesLibraryPromise) {
     return placesLibraryPromise;
   }
 
-  placesLibraryPromise = loadGoogleMapsClient(apiKey).then(async () => {
-    if (window.google?.maps?.importLibrary) {
-      const placesLibrary = await window.google.maps.importLibrary("places");
-      if (placesLibrary?.AutocompleteService && placesLibrary?.PlacesService) {
-        return placesLibrary;
+  placesLibraryPromise = loadGoogleMapsClient(apiKey)
+    .then(async () => {
+      if (!window.google?.maps?.importLibrary) {
+        throw new Error(
+          "Google Maps importLibrary is unavailable."
+        );
       }
-    }
 
-    const fallbackPlacesApi = getLegacyPlacesApi();
-    if (
-      fallbackPlacesApi?.AutocompleteService &&
-      fallbackPlacesApi?.PlacesService &&
-      fallbackPlacesApi?.PlacesServiceStatus
-    ) {
-      return fallbackPlacesApi;
-    }
+      const places =
+        await window.google.maps.importLibrary("places");
 
-    throw new Error("Google Places API is not available.");
-  });
+      if (!places?.AutocompleteSuggestion) {
+        throw new Error(
+          "Google Places API (New) is not available. " +
+          "Make sure Places API (New) is enabled in Google Cloud."
+        );
+      }
+
+      return places;
+    })
+    .catch((error) => {
+      placesLibraryPromise = null;
+      throw error;
+    });
 
   return placesLibraryPromise;
 }
+

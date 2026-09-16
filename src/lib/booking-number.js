@@ -1,7 +1,7 @@
 import { BookingCounter } from "@/models/BookingCounter";
 
 const COUNTER_KEY = "booking:number:v2";
-const DEFAULT_START = 10000;
+const DEFAULT_START = 5000;
 
 function getStartNumber() {
   const parsed = Number(process.env.BOOKING_NUMBER_START || DEFAULT_START);
