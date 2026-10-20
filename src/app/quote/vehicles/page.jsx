@@ -1,22 +1,23 @@
-'use client';
 
-import Image from 'next/image';
-import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
-import { QuoteBookingDetailsCard } from '@/components/quote-booking-details-card';
-import { useBookingFlow } from '@/hooks/use-booking-flow';
-import { toApiLocationPayload } from '@/lib/location-utils';
+"use client";
+
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { QuoteBookingDetailsCard } from "@/components/quote-booking-details-card";
+import { useBookingFlow } from "@/hooks/use-booking-flow";
+import { toApiLocationPayload } from "@/lib/location-utils";
 
 function reverseStops(stops) {
   return [...(stops || [])].reverse();
 }
 
-function formatMoney(value, currency = 'GBP') {
+function formatMoney(value, currency = "GBP") {
   try {
-    return new Intl.NumberFormat('en-GB', {
-      style: 'currency',
+    return new Intl.NumberFormat("en-GB", {
+      style: "currency",
       currency,
-      currencyDisplay: 'narrowSymbol',
+      currencyDisplay: "narrowSymbol",
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(Number(value || 0));
@@ -26,19 +27,22 @@ function formatMoney(value, currency = 'GBP') {
 }
 
 function locationText(location) {
-  return String(location?.address || location?.label || '').trim();
+  return String(location?.address || location?.label || "").trim();
 }
 
 function buildGoogleMapsUrl({ pickup, dropoff, stops = [] }) {
   const origin = encodeURIComponent(locationText(pickup));
   const destination = encodeURIComponent(locationText(dropoff));
+
   const waypointText = (stops || [])
     .map((item) => locationText(item))
     .filter(Boolean)
-    .join('|');
+    .join("|");
+
   const waypoints = waypointText
     ? `&waypoints=${encodeURIComponent(waypointText)}`
-    : '';
+    : "";
+
   return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypoints}&travelmode=driving`;
 }
 
@@ -46,60 +50,69 @@ function buildGoogleMapsEmbedUrl({ pickup, dropoff }) {
   const query = encodeURIComponent(
     `${locationText(pickup)} to ${locationText(dropoff)}`,
   );
+
   return `https://www.google.com/maps?q=${query}&output=embed`;
 }
 
 async function reserveQuote(payload) {
-  const response = await fetch('/api/quotes', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  const response = await fetch("/api/quotes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 
   const result = await response.json().catch(() => ({}));
+
   if (!response.ok) {
-    throw new Error(result.error || 'Unable to reserve selected vehicle.');
+    throw new Error(result.error || "Unable to reserve selected vehicle.");
   }
+
   if (!result.quoteId) {
-    throw new Error('Quote ID is missing in reserve response.');
+    throw new Error("Quote ID is missing in reserve response.");
   }
+
   return result;
 }
 
 export default function QuoteVehiclesPage() {
   const router = useRouter();
   const { state, hydrated, updateState } = useBookingFlow();
-  const [selectedCode, setSelectedCode] = useState('');
-  const [tripType, setTripType] = useState('single');
+
+  const [selectedCode, setSelectedCode] = useState("");
+  const [tripType, setTripType] = useState("single");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [activeMap, setActiveMap] = useState('');
+  const [error, setError] = useState("");
+  const [activeMap, setActiveMap] = useState("");
+
+  const vehicles = state?.pricing?.vehicles || [];
 
   const hasData = Boolean(
     state?.route &&
-    state?.pricing?.vehicles?.length > 0 &&
-    state?.metrics?.outbound,
+      vehicles.length > 0 &&
+      state?.metrics?.outbound,
   );
 
   const selectedVehicle = useMemo(
     () =>
-      (state?.pricing?.vehicles || []).find(
-        (item) => item.vehicle?.code === selectedCode,
+      vehicles.find(
+        (item) =>
+          String(item.vehicle?.code || "").toLowerCase() ===
+          String(selectedCode).toLowerCase(),
       ) || null,
-    [selectedCode, state?.pricing?.vehicles],
+    [selectedCode, vehicles],
   );
 
   const canReturn = useMemo(
     () =>
-      (state?.pricing?.vehicles || []).some(
+      vehicles.some(
         (item) =>
           item?.inboundBreakdown &&
-          Number(item?.inboundBreakdown?.total || 0) > 0,
+          Number(item.inboundBreakdown.total) > 0,
       ),
-    [state?.pricing?.vehicles],
+    [vehicles],
   );
 
-  const isReturn = tripType === 'return' && canReturn;
+  const isReturn = tripType === "return" && canReturn;
 
   const outboundRoute = useMemo(
     () => ({
@@ -133,67 +146,100 @@ export default function QuoteVehiclesPage() {
 
   useEffect(() => {
     if (!hydrated) return;
+
     if (!hasData) {
-      router.replace('/quote');
+      router.replace("/quote");
       return;
     }
 
-    const firstCode = state.pricing.vehicles[0]?.vehicle?.code || '';
-    setSelectedCode(state.selection?.vehicleCode || firstCode);
-    setTripType(
-      canReturn && state.selection?.tripType === 'return' ? 'return' : 'single',
-    );
-  }, [canReturn, hydrated, hasData, router, state]);
+    const firstCode = vehicles[0]?.vehicle?.code || "";
+
+    setSelectedCode((current) => {
+      const exists = vehicles.some(
+        (item) =>
+          String(item.vehicle?.code || "").toLowerCase() ===
+          String(current).toLowerCase(),
+      );
+
+      return exists
+        ? current
+        : state.selection?.vehicleCode || firstCode;
+    });
+
+    setTripType((current) => {
+      if (current === "return" && canReturn) return current;
+
+      return canReturn && state.selection?.tripType === "return"
+        ? "return"
+        : "single";
+    });
+  }, [canReturn, hydrated, hasData, router, state, vehicles]);
 
   useEffect(() => {
-    if (!canReturn && tripType === 'return') {
-      setTripType('single');
+    if (!canReturn && tripType === "return") {
+      setTripType("single");
     }
   }, [canReturn, tripType]);
 
   useEffect(() => {
-    if (!isReturn && activeMap === 'inbound') {
-      setActiveMap('');
+    if (!isReturn && activeMap === "inbound") {
+      setActiveMap("");
     }
   }, [activeMap, isReturn]);
 
   async function continueToDetails() {
     if (!selectedVehicle) {
-      setError('Please select a vehicle.');
+      setError("Please select a vehicle.");
+      return;
+    }
+
+    if (isReturn && !selectedVehicle.inboundBreakdown) {
+      setError("Return pricing is unavailable for this vehicle. Please select a single journey.");
       return;
     }
 
     setBusy(true);
-    setError('');
+    setError("");
 
     try {
       const route = state.route;
       const outboundMetrics = state.metrics.outbound;
       const inboundMetrics = state.metrics.inbound;
 
+      const outboundMiles = Number(outboundMetrics?.miles);
+
+      if (!Number.isFinite(outboundMiles) || outboundMiles <= 0) {
+        throw new Error("A valid outbound route distance is required.");
+      }
+
       const outboundPayload = {
         pickup: toApiLocationPayload(route.pickup),
         dropoff: toApiLocationPayload(route.dropoff),
-        stops: (route.stops || []).map((item) => toApiLocationPayload(item)),
-        miles: outboundMetrics.miles,
-        includeMeetAndGreet: route.includeMeetAndGreet,
-        isNightRide: route.isNightRide,
+        stops: (route.stops || []).map(toApiLocationPayload),
+        miles: outboundMiles,
+        includeMeetAndGreet: Boolean(route.includeMeetAndGreet),
+        isNightRide: Boolean(route.isNightRide),
         vehicleCode: selectedVehicle.vehicle.code,
       };
 
       const outboundReserved = await reserveQuote(outboundPayload);
+
       let inboundReserved = null;
 
-      if (isReturn && inboundMetrics) {
+      if (isReturn) {
+        const inboundMiles = Number(inboundMetrics?.miles);
+
+        if (!Number.isFinite(inboundMiles) || inboundMiles <= 0) {
+          throw new Error("A valid return route distance is required.");
+        }
+
         inboundReserved = await reserveQuote({
           pickup: toApiLocationPayload(route.dropoff),
           dropoff: toApiLocationPayload(route.pickup),
-          stops: reverseStops(route.stops).map((item) =>
-            toApiLocationPayload(item),
-          ),
-          miles: inboundMetrics.miles,
-          includeMeetAndGreet: route.includeMeetAndGreet,
-          isNightRide: route.isNightRide,
+          stops: reverseStops(route.stops).map(toApiLocationPayload),
+          miles: inboundMiles,
+          includeMeetAndGreet: Boolean(route.includeMeetAndGreet),
+          isNightRide: Boolean(route.isNightRide),
           vehicleCode: selectedVehicle.vehicle.code,
         });
       }
@@ -202,22 +248,23 @@ export default function QuoteVehiclesPage() {
         ...previous,
         selection: {
           vehicleCode: selectedVehicle.vehicle.code,
-          tripType,
+          tripType: isReturn ? "return" : "single",
         },
         selectedVehicle: selectedVehicle.vehicle,
         quotes: {
           outboundQuoteId: outboundReserved.quoteId,
-          inboundQuoteId: inboundReserved?.quoteId || '',
-          expiresAt: outboundReserved.expiresAt || '',
+          inboundQuoteId: inboundReserved?.quoteId || "",
+          expiresAt: outboundReserved.expiresAt || "",
         },
       }));
 
-      router.push('/quote/details', { scroll: false });
+      router.push("/quote/details", { scroll: false });
     } catch (submitError) {
       const message =
         submitError instanceof Error
           ? submitError.message
-          : 'Unable to continue.';
+          : "Unable to continue.";
+
       setError(message);
     } finally {
       setBusy(false);
@@ -252,28 +299,34 @@ export default function QuoteVehiclesPage() {
               </h2>
 
               <div className="mt-4 space-y-3">
-                {(state.pricing.vehicles || []).map((item) => {
-                  const code = item.vehicle?.code || '';
-                  const currency = item.outboundBreakdown?.currency || 'GBP';
+                {vehicles.map((item) => {
+                  const code = item.vehicle?.code || "";
+                  const currency = item.outboundBreakdown?.currency || "GBP";
+
                   const singleChecked =
-                    selectedCode === code && tripType === 'single';
+                    selectedCode === code && tripType === "single";
+
                   const returnChecked =
-                    selectedCode === code && tripType === 'return';
+                    selectedCode === code && tripType === "return";
+
                   const isSelected = singleChecked || returnChecked;
+
+                  const hasVehicleReturnFare = Boolean(
+                    item.inboundBreakdown &&
+                      Number(item.inboundBreakdown.total) > 0,
+                  );
 
                   return (
                     <article
                       key={code}
                       className={`rounded-[6px] border p-4 transition-colors ${
                         isSelected
-                          ? 'border-[#6ba5c7] bg-[rgba(107,165,199,0.1)]'
-                          : 'border-[#3a4753] bg-[rgba(48,58,68,0.6)]'
+                          ? "border-[#6ba5c7] bg-[rgba(107,165,199,0.1)]"
+                          : "border-[#3a4753] bg-[rgba(48,58,68,0.6)]"
                       }`}
                     >
                       <div className="flex flex-col gap-3">
-                        {/* Image and content row */}
                         <div className="flex gap-4">
-                          {/* Vehicle image */}
                           <div className="shrink-0">
                             <div className="flex h-[80px] w-[120px] items-center justify-center rounded-[4px] bg-[#2a3743] p-2">
                               <div className="flex h-full w-full items-center justify-center">
@@ -298,11 +351,8 @@ export default function QuoteVehiclesPage() {
                             </div>
                           </div>
 
-                          {/* Price radios and vehicle details */}
                           <div className="flex flex-1 flex-col gap-2">
-                            {/* Price row */}
                             <div className="flex flex-wrap items-center gap-4">
-                              {/* Single price with radio */}
                               <label className="flex cursor-pointer items-center gap-2 text-white">
                                 <input
                                   type="radio"
@@ -310,18 +360,17 @@ export default function QuoteVehiclesPage() {
                                   checked={singleChecked}
                                   onChange={() => {
                                     setSelectedCode(code);
-                                    setTripType('single');
+                                    setTripType("single");
                                   }}
                                   className="h-3.5 w-3.5 accent-[#6ba5c7]"
                                 />
                                 <span className="whitespace-nowrap text-base font-medium">
-                                  Single:{' '}
+                                  Single:{" "}
                                   {formatMoney(item.singleTotal, currency)}
                                 </span>
                               </label>
 
-                              {/* Return price with radio */}
-                              {canReturn && (
+                              {canReturn && hasVehicleReturnFare && (
                                 <label className="flex cursor-pointer items-center gap-2 text-white">
                                   <input
                                     type="radio"
@@ -329,35 +378,40 @@ export default function QuoteVehiclesPage() {
                                     checked={returnChecked}
                                     onChange={() => {
                                       setSelectedCode(code);
-                                      setTripType('return');
+                                      setTripType("return");
                                     }}
                                     className="h-3.5 w-3.5 accent-[#6ba5c7]"
                                   />
                                   <span className="whitespace-nowrap text-base font-medium">
-                                    Return:{' '}
+                                    Return:{" "}
                                     {formatMoney(item.returnTotal, currency)}
                                   </span>
                                 </label>
                               )}
                             </div>
-
                           </div>
                         </div>
                       </div>
 
-                            {/* Vehicle name and description */}
-                            <div>
-                              <h3 className="text-[15px] font-medium border-b text-[#6ba5c7]">
-                                {item.vehicle?.name} | {item.vehicle.variants}
-                              </h3>
-                              <p className="mt-0.5 text-[13px] leading-5 text-gray-300">
-                                {item.vehicle?.description ||
-                                  `This vehicle can accommodate up to ${item.vehicle?.seats || 0} passengers travelling with ${item.vehicle?.luggage || 0} luggage.`}
-                              </p> 
-                              <p className="mt-1 text-[12px] leading-5 text-gray-400">
-                                Capacity: {item.vehicle?.seats || 0} passengers, {item.vehicle?.luggage || 0} luggage
-                              </p>
-                            </div>
+                      <div>
+                        <h3 className="border-b text-[15px] font-medium text-[#6ba5c7]">
+                          {item.vehicle?.name} | {item.vehicle?.variants}
+                        </h3>
+
+                        <p className="mt-0.5 text-[13px] leading-5 text-gray-300">
+                          {item.vehicle?.description ||
+                            `This vehicle can accommodate up to ${
+                              item.vehicle?.seats || 0
+                            } passengers travelling with ${
+                              item.vehicle?.luggage || 0
+                            } luggage.`}
+                        </p>
+
+                        <p className="mt-1 text-[12px] leading-5 text-gray-400">
+                          Capacity: {item.vehicle?.seats || 0} passengers,{" "}
+                          {item.vehicle?.luggage || 0} luggage
+                        </p>
+                      </div>
                     </article>
                   );
                 })}
@@ -367,8 +421,8 @@ export default function QuoteVehiclesPage() {
             <div className="space-y-6">
               <QuoteBookingDetailsCard
                 title="Your Journey Details"
-                vehicleName={selectedVehicle?.vehicle?.name || ''}
-                tripType={tripType}
+                vehicleName={selectedVehicle?.vehicle?.name || ""}
+                tripType={isReturn ? "return" : "single"}
                 outbound={outboundRoute}
                 inbound={isReturn ? inboundRoute : null}
                 renderLegActions={({ legKey }) => (
@@ -376,12 +430,12 @@ export default function QuoteVehiclesPage() {
                     type="button"
                     onClick={() =>
                       setActiveMap((previous) =>
-                        previous === legKey ? '' : legKey,
+                        previous === legKey ? "" : legKey,
                       )
                     }
                     className="rounded-md bg-[linear-gradient(180deg,#58bde0,#2f7ea0)] px-3 py-2 text-xs font-medium text-white hover:brightness-105"
                   >
-                    {activeMap === legKey ? 'Hide Map' : 'Show Map'}
+                    {activeMap === legKey ? "Hide Map" : "Show Map"}
                   </button>
                 )}
               />
@@ -390,11 +444,14 @@ export default function QuoteVehiclesPage() {
                 <div className="rounded-[6px] bg-[rgba(38,48,58,0.95)] p-4">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <p className="text-sm font-medium text-white">
-                      {activeMap === 'inbound' ? 'Inbound map' : 'Journey map'}
+                      {activeMap === "inbound" ? "Inbound map" : "Journey map"}
                     </p>
+
                     <a
                       href={buildGoogleMapsUrl(
-                        activeMap === 'inbound' ? inboundRoute : outboundRoute,
+                        activeMap === "inbound"
+                          ? inboundRoute
+                          : outboundRoute,
                       )}
                       target="_blank"
                       rel="noreferrer"
@@ -403,15 +460,18 @@ export default function QuoteVehiclesPage() {
                       Open in Google Maps
                     </a>
                   </div>
+
                   <div className="overflow-hidden rounded-[6px] border border-white/10">
                     <iframe
                       title={
-                        activeMap === 'inbound'
-                          ? 'Inbound route map'
-                          : 'Journey route map'
+                        activeMap === "inbound"
+                          ? "Inbound route map"
+                          : "Journey route map"
                       }
                       src={buildGoogleMapsEmbedUrl(
-                        activeMap === 'inbound' ? inboundRoute : outboundRoute,
+                        activeMap === "inbound"
+                          ? inboundRoute
+                          : outboundRoute,
                       )}
                       className="h-[280px] w-full"
                       loading="lazy"
@@ -427,37 +487,41 @@ export default function QuoteVehiclesPage() {
                     <span className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
                       Selection
                     </span>
+
                     <span className="rounded-full bg-[rgba(255,255,255,0.08)] px-3 py-1.5 text-sm font-semibold text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]">
                       {selectedVehicle?.vehicle?.name ||
-                        selectedVehicle?.name ||
-                        'No vehicle selected'}
+                        "No vehicle selected"}
                     </span>
+
                     <span className="rounded-full bg-[#67c8ee]/12 px-3 py-1.5 text-sm font-semibold capitalize text-[#c7effb] shadow-[inset_0_0_0_1px_rgba(103,200,238,0.22)]">
-                      {tripType}
+                      {isReturn ? "return" : "single"}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => router.push('/quote', { scroll: false })}
+                      onClick={() => router.push("/quote", { scroll: false })}
                       className="rounded-[8px] bg-[rgba(255,255,255,0.08)] px-3 py-2 text-xs font-medium text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)] hover:bg-[rgba(255,255,255,0.14)]"
                     >
                       Back
                     </button>
+
                     <button
                       type="button"
                       disabled={busy}
                       onClick={continueToDetails}
                       className="site-primary-btn rounded-[8px] px-4 py-2 text-xs font-semibold disabled:opacity-60"
                     >
-                      {busy ? 'Preparing...' : 'Continue'}
+                      {busy ? "Preparing..." : "Continue"}
                     </button>
                   </div>
                 </div>
               </section>
 
-              {error ? <p className="text-sm text-red-300">{error}</p> : null}
+              {error ? (
+                <p className="text-sm text-red-300">{error}</p>
+              ) : null}
             </div>
           </div>
         </div>

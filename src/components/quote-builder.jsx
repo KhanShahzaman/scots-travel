@@ -1,17 +1,26 @@
+
 "use client";
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { GooglePlaceInput } from "@/components/google-place-input";
-import { createEmptyBookingFlow, readBookingFlowState, saveBookingFlowState } from "@/lib/booking-flow-client";
-import { isUkLocation, normalizeClientLocation, toApiLocationPayload } from "@/lib/location-utils";
+import {
+  createEmptyBookingFlow,
+  readBookingFlowState,
+  saveBookingFlowState,
+} from "@/lib/booking-flow-client";
+import {
+  isUkLocation,
+  normalizeClientLocation,
+  toApiLocationPayload,
+} from "@/lib/location-utils";
 import { calculateRouteMetrics } from "@/lib/route-metrics-client";
 
 const defaultContent = {
   title: "Start Your Journey",
   subtitle: "Add route details to continue to vehicle selection.",
   submitLabel: "Continue to Vehicles",
-  helperText: "Prices shown on next step are generated from state and vehicle rates.",
+  helperText: "Prices are calculated using common vehicle rates and your actual route distance.",
   fields: {
     pickupLabel: "Pickup",
     pickupPlaceholder: "Airport or address",
@@ -61,6 +70,7 @@ function getPrefillFlowState(enabled) {
   }
 
   const flow = readBookingFlowState();
+
   if (!flow?.route?.pickup || !flow?.route?.dropoff) {
     return null;
   }
@@ -68,7 +78,9 @@ function getPrefillFlowState(enabled) {
   return {
     pickup: normalizeClientLocation(flow.route.pickup),
     dropoff: normalizeClientLocation(flow.route.dropoff),
-    stops: Array.isArray(flow.route.stops) ? flow.route.stops.map((item) => normalizeClientLocation(item)) : [],
+    stops: Array.isArray(flow.route.stops)
+      ? flow.route.stops.map((item) => normalizeClientLocation(item))
+      : [],
     includeMeetAndGreet: Boolean(flow.route.includeMeetAndGreet),
   };
 }
@@ -81,30 +93,46 @@ async function requestPreview(payload) {
   });
 
   const result = await response.json().catch(() => ({}));
+
   if (!response.ok) {
     throw new Error(result.error || "Unable to fetch vehicle rates.");
   }
 
   if (!Array.isArray(result.options) || result.options.length === 0) {
-    throw new Error("No active rates available for this route.");
+    throw new Error("No active vehicle rates are configured.");
   }
 
   return result;
 }
 
-export function QuoteBuilder({ content, variant = "default", prefill = false }) {
+export function QuoteBuilder({
+  content,
+  variant = "default",
+  prefill = false,
+}) {
   const router = useRouter();
   const uiContent = useMemo(() => mergeContent(content), [content]);
-  const prefillState = useMemo(() => getPrefillFlowState(prefill), [prefill]);
+  const prefillState = useMemo(
+    () => getPrefillFlowState(prefill),
+    [prefill],
+  );
 
-  const [pickup, setPickup] = useState(() => prefillState?.pickup || emptyLocation());
-  const [dropoff, setDropoff] = useState(() => prefillState?.dropoff || emptyLocation());
+  const [pickup, setPickup] = useState(
+    () => prefillState?.pickup || emptyLocation(),
+  );
+  const [dropoff, setDropoff] = useState(
+    () => prefillState?.dropoff || emptyLocation(),
+  );
   const [stops, setStops] = useState(() => prefillState?.stops || []);
-  const [includeMeetAndGreet, setIncludeMeetAndGreet] = useState(() => prefillState?.includeMeetAndGreet || false);
+  const [includeMeetAndGreet, setIncludeMeetAndGreet] = useState(
+    () => prefillState?.includeMeetAndGreet || false,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const googleApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
+  const googleApiKey =
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
+    process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
 
   function addStop() {
     setStops((previous) => {
@@ -114,11 +142,17 @@ export function QuoteBuilder({ content, variant = "default", prefill = false }) 
   }
 
   function removeStop(index) {
-    setStops((previous) => previous.filter((_, currentIndex) => currentIndex !== index));
+    setStops((previous) =>
+      previous.filter((_, currentIndex) => currentIndex !== index),
+    );
   }
 
   function updateStop(index, value) {
-    setStops((previous) => previous.map((item, currentIndex) => (currentIndex === index ? value : item)));
+    setStops((previous) =>
+      previous.map((item, currentIndex) =>
+        currentIndex === index ? value : item,
+      ),
+    );
   }
 
   async function onSubmit(event) {
@@ -129,30 +163,38 @@ export function QuoteBuilder({ content, variant = "default", prefill = false }) 
     try {
       const normalizedPickup = normalizeClientLocation(pickup);
       const normalizedDropoff = normalizeClientLocation(dropoff);
+
       const normalizedStops = (stops || [])
         .map((item) => normalizeClientLocation(item))
         .filter((item) => item.address.length > 0);
-      const payloadPickup = toApiLocationPayload(normalizedPickup);
-      const payloadDropoff = toApiLocationPayload(normalizedDropoff);
-      const payloadStops = normalizedStops.map((item) => toApiLocationPayload(item));
 
       if (!normalizedPickup.address) {
         throw new Error("Pickup location is required.");
       }
+
       if (!normalizedDropoff.address) {
         throw new Error("Drop-off location is required.");
       }
+
       if (normalizedStops.length > 4) {
         throw new Error("Maximum 4 stop locations are allowed.");
       }
 
-      // if (!isUkLocation(normalizedPickup) || !isUkLocation(normalizedDropoff)) {
-      //   throw new Error("Pickup and drop-off must be within UK.");
-      // }
-      if (normalizedStops.some((item) => !isUkLocation(item))) {
-        throw new Error("All stop locations must be within UK.");
+      const allLocations = [
+        normalizedPickup,
+        normalizedDropoff,
+        ...normalizedStops,
+      ];
+
+      if (allLocations.some((location) => !isUkLocation(location))) {
+        throw new Error("All locations must be within the UK.");
       }
 
+      const payloadPickup = toApiLocationPayload(normalizedPickup);
+      const payloadDropoff = toApiLocationPayload(normalizedDropoff);
+      const payloadStops = normalizedStops.map(toApiLocationPayload);
+
+      // Calculate the actual outbound route distance.
       const outboundMetrics = await calculateRouteMetrics({
         pickup: normalizedPickup,
         dropoff: normalizedDropoff,
@@ -160,44 +202,66 @@ export function QuoteBuilder({ content, variant = "default", prefill = false }) 
         apiKey: googleApiKey,
       });
 
+      if (
+        !Number.isFinite(Number(outboundMetrics?.miles)) ||
+        Number(outboundMetrics.miles) <= 0
+      ) {
+        throw new Error("Unable to calculate the outbound route distance.");
+      }
+
       const outboundPreview = await requestPreview({
         pickup: payloadPickup,
         dropoff: payloadDropoff,
         stops: payloadStops,
-        miles: outboundMetrics.miles,
+        miles: Number(outboundMetrics.miles),
         includeMeetAndGreet,
       });
 
+      // Calculate the return route independently because its distance may differ.
       let inboundMetrics = null;
       let inboundPreview = null;
+
       try {
         const inboundStops = reverseStops(normalizedStops);
-        inboundMetrics = await calculateRouteMetrics({
+
+        const calculatedInboundMetrics = await calculateRouteMetrics({
           pickup: normalizedDropoff,
           dropoff: normalizedPickup,
           stops: inboundStops,
           apiKey: googleApiKey,
         });
 
-        inboundPreview = await requestPreview({
-          pickup: payloadDropoff,
-          dropoff: payloadPickup,
-          stops: inboundStops.map((item) => toApiLocationPayload(item)),
-          miles: inboundMetrics.miles,
-          includeMeetAndGreet,
-        });
-      } catch {
-        inboundMetrics = null;
-        inboundPreview = null;
+        if (
+          Number.isFinite(Number(calculatedInboundMetrics?.miles)) &&
+          Number(calculatedInboundMetrics.miles) > 0
+        ) {
+          const calculatedInboundPreview = await requestPreview({
+            pickup: payloadDropoff,
+            dropoff: payloadPickup,
+            stops: inboundStops.map(toApiLocationPayload),
+            miles: Number(calculatedInboundMetrics.miles),
+            includeMeetAndGreet,
+          });
+
+          inboundMetrics = calculatedInboundMetrics;
+          inboundPreview = calculatedInboundPreview;
+        }
+      } catch (inboundError) {
+        // The outbound quote remains available if the return route fails.
+        console.warn("Return route quote unavailable:", inboundError);
       }
 
       const inboundMap = new Map(
-        (inboundPreview?.options || []).map((option) => [String(option.vehicle?.code || "").toLowerCase(), option]),
+        (inboundPreview?.options || []).map((option) => [
+          String(option.vehicle?.code || "").toLowerCase(),
+          option,
+        ]),
       );
 
       const vehicles = (outboundPreview.options || []).map((option) => {
         const code = String(option.vehicle?.code || "").toLowerCase();
         const inboundOption = inboundMap.get(code) || null;
+
         const outboundTotal = Number(option.breakdown?.total || 0);
         const inboundTotal = Number(inboundOption?.breakdown?.total || 0);
 
@@ -206,7 +270,9 @@ export function QuoteBuilder({ content, variant = "default", prefill = false }) 
           outboundBreakdown: option.breakdown,
           inboundBreakdown: inboundOption?.breakdown || null,
           singleTotal: Number(outboundTotal.toFixed(2)),
-          returnTotal: Number((outboundTotal + inboundTotal).toFixed(2)),
+          returnTotal: Number(
+            (outboundTotal + inboundTotal).toFixed(2),
+          ),
         };
       });
 
@@ -215,7 +281,9 @@ export function QuoteBuilder({ content, variant = "default", prefill = false }) 
       }
 
       const flow = createEmptyBookingFlow();
+
       flow.createdAt = new Date().toISOString();
+
       flow.route = {
         pickup: payloadPickup,
         dropoff: payloadDropoff,
@@ -224,15 +292,17 @@ export function QuoteBuilder({ content, variant = "default", prefill = false }) 
         isNightRide: false,
         isReturnJourney: true,
       };
+
       flow.metrics = {
         outbound: outboundMetrics,
         inbound: inboundMetrics,
       };
+
+      // Pricing no longer depends on a pickup state or region.
       flow.pricing = {
-        outboundState: outboundPreview.state || null,
-        inboundState: inboundPreview?.state || null,
         vehicles,
       };
+
       flow.selection = {
         vehicleCode: vehicles[0]?.vehicle?.code || "",
         tripType: "single",
@@ -241,7 +311,11 @@ export function QuoteBuilder({ content, variant = "default", prefill = false }) 
       saveBookingFlowState(flow);
       router.push("/quote/vehicles", { scroll: false });
     } catch (submitError) {
-      const message = submitError instanceof Error ? submitError.message : "Unable to continue.";
+      const message =
+        submitError instanceof Error
+          ? submitError.message
+          : "Unable to continue.";
+
       setError(message);
     } finally {
       setLoading(false);
@@ -259,15 +333,35 @@ export function QuoteBuilder({ content, variant = "default", prefill = false }) 
           ? "space-y-3 rounded-[6px] border border-white/8 bg-[linear-gradient(180deg,rgba(36,47,57,0.74),rgba(24,34,44,0.7))] p-3.5 text-white shadow-[0_20px_44px_rgba(0,0,0,0.22)] sm:p-4"
           : isDark
             ? "space-y-4 rounded-2xl bg-[linear-gradient(180deg,rgba(29,46,66,0.94),rgba(24,39,58,0.9))] p-6 text-white shadow-[0_24px_60px_rgba(2,9,18,0.34),inset_0_1px_0_rgba(255,255,255,0.08)]"
-          : "site-panel space-y-4 rounded-2xl p-6"
+            : "site-panel space-y-4 rounded-2xl p-6"
       }
     >
       <div>
-        <p className={`text-xs font-semibold uppercase tracking-[0.2em] ${isDark ? "text-slate-200" : "text-slate-500"}`}>
+        <p
+          className={`text-xs font-semibold uppercase tracking-[0.2em] ${
+            isDark ? "text-slate-200" : "text-slate-500"
+          }`}
+        >
           Airport Transfers Cost - Instant Quote
         </p>
-        <h2 className={`mt-2 font-semibold ${isDark ? "text-[1.9rem] tracking-[-0.02em] text-white" : "text-[1.05rem] text-slate-900"}`}>{uiContent.title}</h2>
-        <p className={`mt-1 ${isDark ? "text-sm text-slate-300" : "text-xs text-slate-600"}`}>{uiContent.subtitle}</p>
+
+        <h2
+          className={`mt-2 font-semibold ${
+            isDark
+              ? "text-[1.9rem] tracking-[-0.02em] text-white"
+              : "text-[1.05rem] text-slate-900"
+          }`}
+        >
+          {uiContent.title}
+        </h2>
+
+        <p
+          className={`mt-1 ${
+            isDark ? "text-sm text-slate-300" : "text-xs text-slate-600"
+          }`}
+        >
+          {uiContent.subtitle}
+        </p>
       </div>
 
       <GooglePlaceInput
@@ -290,17 +384,30 @@ export function QuoteBuilder({ content, variant = "default", prefill = false }) 
         theme={isDark ? "dark" : "light"}
       />
 
-      <p className={`text-xs ${isDark ? "text-slate-300" : "text-slate-500"}`}>
+      <p
+        className={`text-xs ${
+          isDark ? "text-slate-300" : "text-slate-500"
+        }`}
+      >
         Only UK locations are allowed for pickup, drop-off and stops.
       </p>
 
       <div
         className={`space-y-2 rounded-xl border p-3 ${
-          isDark ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50"
+          isDark
+            ? "border-white/10 bg-white/5"
+            : "border-slate-200 bg-slate-50"
         }`}
       >
         <div className="flex items-center justify-between">
-          <p className={`text-sm font-medium ${isDark ? "text-white" : "text-slate-700"}`}>{uiContent.fields.waypointsLabel}</p>
+          <p
+            className={`text-sm font-medium ${
+              isDark ? "text-white" : "text-slate-700"
+            }`}
+          >
+            {uiContent.fields.waypointsLabel}
+          </p>
+
           <button
             type="button"
             onClick={addStop}
@@ -315,18 +422,35 @@ export function QuoteBuilder({ content, variant = "default", prefill = false }) 
           </button>
         </div>
 
-        {stops.length === 0 ? <p className={`text-xs ${isDark ? "text-slate-300" : "text-slate-500"}`}>No stops added.</p> : null}
+        {stops.length === 0 ? (
+          <p
+            className={`text-xs ${
+              isDark ? "text-slate-300" : "text-slate-500"
+            }`}
+          >
+            No stops added.
+          </p>
+        ) : null}
 
         <div className="space-y-3">
           {stops.map((stop, index) => (
             <div
               key={`stop-${index}`}
-              className={`rounded-md border p-3 ${isDark ? "border-white/12 bg-white/6" : "border-slate-200 bg-white"}`}
+              className={`rounded-md border p-3 ${
+                isDark
+                  ? "border-white/12 bg-white/6"
+                  : "border-slate-200 bg-white"
+              }`}
             >
               <div className="mb-2 flex items-center justify-between">
-                <p className={`text-xs font-semibold uppercase tracking-wide ${isDark ? "text-slate-300" : "text-slate-500"}`}>
+                <p
+                  className={`text-xs font-semibold uppercase tracking-wide ${
+                    isDark ? "text-slate-300" : "text-slate-500"
+                  }`}
+                >
                   Stop {index + 1}
                 </p>
+
                 <button
                   type="button"
                   onClick={() => removeStop(index)}
@@ -353,18 +477,28 @@ export function QuoteBuilder({ content, variant = "default", prefill = false }) 
         </div>
       </div>
 
-      <div className={`grid gap-3 text-sm ${isDark ? "sm:grid-cols-2 text-slate-100" : "text-slate-700"}`}>
+      <div
+        className={`grid gap-3 text-sm ${
+          isDark ? "sm:grid-cols-2 text-slate-100" : "text-slate-700"
+        }`}
+      >
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
             checked={includeMeetAndGreet}
-            onChange={(event) => setIncludeMeetAndGreet(event.target.checked)}
+            onChange={(event) =>
+              setIncludeMeetAndGreet(event.target.checked)
+            }
           />
           {uiContent.fields.meetAndGreetLabel}
         </label>
       </div>
 
-      <div className={`flex flex-col gap-3 ${isDark ? "sm:flex-row sm:items-center sm:justify-between" : ""}`}>
+      <div
+        className={`flex flex-col gap-3 ${
+          isDark ? "sm:flex-row sm:items-center sm:justify-between" : ""
+        }`}
+      >
         <button
           type="submit"
           disabled={loading}
@@ -374,7 +508,16 @@ export function QuoteBuilder({ content, variant = "default", prefill = false }) 
         >
           {loading ? "Checking routes and fares..." : uiContent.submitLabel}
         </button>
-        <p className={`text-xs leading-5 ${isDark ? "text-slate-300 sm:max-w-[260px]" : "text-slate-500"}`}>{uiContent.helperText}</p>
+
+        <p
+          className={`text-xs leading-5 ${
+            isDark
+              ? "text-slate-300 sm:max-w-[260px]"
+              : "text-slate-500"
+          }`}
+        >
+          {uiContent.helperText}
+        </p>
       </div>
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}

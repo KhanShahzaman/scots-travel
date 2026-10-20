@@ -1,3 +1,4 @@
+
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { connectToDatabase } from "@/lib/db";
@@ -42,23 +43,46 @@ export async function POST(request) {
     const parsed = quoteSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid quote payload." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid quote payload." },
+        { status: 400 },
+      );
     }
 
-    const normalizedStops = (parsed.data.stops || []).filter((item) => item.address);
-    const allLocations = [parsed.data.pickup, parsed.data.dropoff, ...normalizedStops];
+    const normalizedStops = (parsed.data.stops || []).filter(
+      (item) => item.address,
+    );
+
+    const allLocations = [
+      parsed.data.pickup,
+      parsed.data.dropoff,
+      ...normalizedStops,
+    ];
 
     if (allLocations.some((location) => !isUkLocation(location))) {
-      return NextResponse.json({ error: "Only UK locations are allowed." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Only UK locations are allowed." },
+        { status: 400 },
+      );
     }
 
     const pickup = { ...parsed.data.pickup, isUk: true };
     const dropoff = { ...parsed.data.dropoff, isUk: true };
-    const stops = normalizedStops.map((stop) => ({ ...stop, isUk: true }));
-    const totalWaypoints = normalizedStops.length;
-    const requestedVehicleCode = (parsed.data.vehicleCode || parsed.data.vehicleClass || "").toLowerCase();
+    const stops = normalizedStops.map((stop) => ({
+      ...stop,
+      isUk: true,
+    }));
+
+    const totalWaypoints = stops.length;
+
+    const requestedVehicleCode = (
+      parsed.data.vehicleCode ||
+      parsed.data.vehicleClass ||
+      ""
+    ).toLowerCase();
 
     await connectToDatabase();
+
     const preview = await getQuotePreview({
       pickup,
       miles: parsed.data.miles,
@@ -72,7 +96,6 @@ export async function POST(request) {
       return NextResponse.json({
         mode: "preview",
         miles: parsed.data.miles,
-        state: preview.state,
         options: preview.options,
         route: {
           pickup,
@@ -83,7 +106,10 @@ export async function POST(request) {
     }
 
     if (!preview.selectedOption) {
-      return NextResponse.json({ error: "Selected vehicle rate is not available for this state." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Selected vehicle rate is not available." },
+        { status: 404 },
+      );
     }
 
     const selected = preview.selectedOption;
@@ -98,7 +124,9 @@ export async function POST(request) {
       vehicleId: selected.vehicle.id,
       vehicleClass: selected.vehicle.code,
       waypoints: totalWaypoints,
-      isNightRide: Boolean(selected.breakdown?.nightSurchargeApplied),
+      isNightRide: Boolean(
+        selected.breakdown?.nightSurchargeApplied,
+      ),
       breakdown: selected.breakdown,
       expiresAt: new Date(Date.now() + 15 * 60 * 1000),
     });
@@ -108,7 +136,6 @@ export async function POST(request) {
       quoteId: String(quote._id),
       expiresAt: quote.expiresAt,
       breakdown: selected.breakdown,
-      state: preview.state,
       vehicle: selected.vehicle,
       route: {
         pickup,
@@ -117,10 +144,18 @@ export async function POST(request) {
       },
     });
   } catch (error) {
-    console.error(error);
+    console.error("Quote API error:", error);
+
     if (error instanceof Error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json(
+        { error: error.message },
+        { status: 400 },
+      );
     }
-    return NextResponse.json({ error: "Failed to calculate quote." }, { status: 500 });
+
+    return NextResponse.json(
+      { error: "Failed to calculate quote." },
+      { status: 500 },
+    );
   }
 }

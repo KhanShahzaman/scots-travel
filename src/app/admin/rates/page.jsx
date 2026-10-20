@@ -1,45 +1,44 @@
-import Link from "next/link";
-import { connectToDatabase } from "@/lib/db";
-import { State } from "@/models/State";
-import { StateVehicleRate } from "@/models/StateVehicleRate";
 
-export default async function AdminRatesStateSelectorPage() {
+import { connectToDatabase } from "@/lib/db";
+import { Vehicle } from "@/models/Vehicle";
+import { VehicleRate } from "@/models/StateVehicleRate";
+import { RatesManager } from "@/components/admin/rates-manager";
+
+export default async function AdminRatesPage() {
   await connectToDatabase();
 
-  const [states, groupedCounts] = await Promise.all([
-    State.find().sort({ order: 1, name: 1 }).lean().exec(),
-    StateVehicleRate.aggregate([
-      { $group: { _id: "$stateId", count: { $sum: 1 } } },
-    ]),
-  ]);
+  const [vehicles, rates] = await Promise.all([
+    Vehicle.find()
+      .sort({ order: 1, name: 1 })
+      .lean()
+      .exec(),
 
-  const countsByStateId = groupedCounts.reduce((acc, row) => {
-    acc[String(row._id)] = row.count;
-    return acc;
-  }, {});
+    VehicleRate.find()
+      .populate({
+        path: "vehicleId",
+        select: "name code description variants order seats luggage active image",
+      })
+      .sort({ updatedAt: -1 })
+      .lean()
+      .exec(),
+  ]);
 
   return (
     <div className="space-y-4">
       <div className="admin-card sticky top-0 z-20 p-4">
-        <h1 className="text-3xl font-semibold text-[var(--admin-text)]">Rates</h1>
+        <h1 className="text-3xl font-semibold text-[var(--admin-text)]">
+          Rates
+        </h1>
+
         <p className="admin-muted mt-2 text-base">
-          Select a state to open its dedicated rates page.
+          Manage common pricing for all pickup and drop-off locations.
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {states.map((state) => (
-          <Link
-            key={String(state._id)}
-            href={`/admin/rates/${state._id}`}
-            className="admin-card admin-link-card p-5 transition"
-          >
-            <p className="text-xs uppercase tracking-[0.14em] text-[var(--admin-text-muted)]">{state.code}</p>
-            <h2 className="mt-1 text-xl font-semibold text-[var(--admin-text)]">{state.name}</h2>
-            <p className="admin-muted mt-2 text-base">Rates configured: {countsByStateId[String(state._id)] || 0}</p>
-          </Link>
-        ))}
-      </div>
+      <RatesManager
+        initialVehicles={JSON.parse(JSON.stringify(vehicles))}
+        initialRates={JSON.parse(JSON.stringify(rates))}
+      />
     </div>
   );
 }
