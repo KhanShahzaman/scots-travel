@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireAdminApiSession } from "@/lib/admin-route";
 import { connectToDatabase } from "@/lib/db";
 import { State } from "@/models/State";
-import { StateVehicleRate } from "@/models/StateVehicleRate";
+import { VehicleRate } from "@/models/StateVehicleRate";
 
 const updateStateSchema = z.object({
   name: z.string().trim().min(2).max(80).optional(),

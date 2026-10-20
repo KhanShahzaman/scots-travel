@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireAdminApiSession } from "@/lib/admin-route";
 import { connectToDatabase } from "@/lib/db";
 import { Vehicle } from "@/models/Vehicle";
-import { StateVehicleRate } from "@/models/StateVehicleRate";
+import { VehicleRate } from "@/models/StateVehicleRate";
 
 function isValidImageUrl(value) {
   if (!value) return false;
